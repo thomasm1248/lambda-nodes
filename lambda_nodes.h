@@ -15,9 +15,9 @@ class Gate
 {
 public:
     GateType type;
-    Node *node;
+    Node& node;
     Gate *connection;
-    Gate(Node* n, GateType t);
+    Gate(Node& n, GateType t);
 };
 
 /* A Node will have three Gates called A, B, and X. A Node will also store
@@ -30,8 +30,10 @@ public:
     Gate A;
     Gate B;
     Gate X;
-    static void connect(Gate& g1, Gate& g2);
     Node(NodeType t);
+    // Tools for constructing and editing graphs
+    static void connect(Gate& g1, Gate& g2);
+    static void join(Gate& gate);
 };
 
 #endif
