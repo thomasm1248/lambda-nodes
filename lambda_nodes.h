@@ -1,39 +1,47 @@
+#include <vector>
+
 #ifndef LAMBDA_NODES
 #define LAMBDA_NODES
 
-enum GateType {TYPE_A, TYPE_B, TYPE_X};
-enum NodeType {HEAD, JOIN, SPLIT};
-
-// Forward declaration so that Gates can use Nodes
-class Node;
-
-/* Each Node will have Gates that connect it to other Nodes. When two Gates
-   are connected, they will contain pointers to each other, and to the Nodes
-   they belong to. Gates also record what type they are.
-*/
-class Gate
+class LambdaNodes
 {
 public:
-    GateType type;
-    Node& node;
-    Gate *connection;
-    Gate(Node& n, GateType t);
-};
+    // Class-specific types to make things clearer
+    enum GateType {
+        N,
 
-/* A Node will have three Gates called A, B, and X. A Node will also store
-   it's type (NodeType).
-*/
-class Node
-{
+        H, A, B, X, S,
+        AX, BX, A2X, B2X, I,
+
+        R, JJ, OO
+    };
+    enum NodeType {NONE, HEAD, JOIN, SPLIT};
+    typedef int Node;
+    struct Gate;
+    typedef Node Cluster;
+
+private:
+    // This 2D vector will contain the entire node graph
+    std::vector<std::vector<GateType>> table;
+    // A vector for keeping track of the type of each node
+    std::vector<NodeType> types;
+
 public:
-    NodeType type;
-    Gate A;
-    Gate B;
-    Gate X;
-    Node(NodeType t);
-    // Tools for constructing and editing graphs
-    static void connect(Gate& g1, Gate& g2);
-    static void join(Gate& gate);
+    // Constructor
+    LambdaNodes();
+    // Some functions for interacting with the graph
+    Node getHead();
+    void printTable();
+    Gate followGate(Node node, GateType type);
+    Gate followGate(Gate gate);
+    std::vector<Gate> getGatesTo(Node node);
+    // Some functions for building the graph
+    Node createNode(NodeType type);
+    void disconnectGate(Node node, GateType gateType);
+    void connect(Node node1, GateType type1, GateType type2, Node node2);
+    void connect(Node node1, GateType type1, Gate gate2);
+    void connect(Gate gate1, GateType type2, Node node2);
+    void connect(Gate gate1, Gate gate2);
 };
 
 #endif
