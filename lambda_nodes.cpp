@@ -135,6 +135,10 @@ void LambdaNodes::disconnectGate(Node node, GateType gateType)
         table[connectedNode][node] = N;
     }
 }
+void LambdaNodes::disconnectGate(Gate gate)
+{
+    disconnectGate(gate.node, gate.type);
+}
 
 /* Overloaded functions for connecting nodes together
 */
@@ -388,7 +392,7 @@ void LambdaNodes::join(Node node1, Node node2)
     auto connections2 = getConnectedNodes(node2);
 
     // Check for identity function case
-    if(connections2[0] == I)
+    if(table[node2][connections2[0]] == I)
     {
         // Connect node1's neighbors together
         // Prepare node1's neighbors
@@ -471,4 +475,194 @@ void LambdaNodes::copy(Gate sourceGate, Gate destinationGate)
 
     // Attach new cluster to destination gate
     connect(destinationGate, followGate(sourceGate).type, prevSize);
+}
+
+/* Moves a "pulse" through the graph, starting at the head node. Its movement will
+   follow specific rules, and it will preform some sort of operation on the graph
+   when it meets certain conditions.
+*/
+bool LambdaNodes::propagatePulse(int limit)
+{
+    // Start with a newline for asthetics
+    std::cout << "\nSTART PULSE\n";// todo remove?
+
+    // Create a gate to start the pulses from
+    Gate currentGate = Gate(0, H);
+
+    GateType previousGateType = N;
+    for(int i = 0; i < limit; i++)
+    {
+        // Follow the gate
+        Gate nextGate = followGate(currentGate);
+        if(nextGate.node == NOT_FOUND)
+        {
+            // Since the regular gate type didn't work, use whatever's there
+            auto connections = getConnectedNodes(currentGate.node);
+            if(connections.size() == 2)
+            {
+                if(table[currentGate.node][connections[0]] == previousGateType)
+                    nextGate = Gate(connections[1], table[connections[1]][currentGate.node]);
+                else
+                    nextGate = Gate(connections[0], table[connections[0]][currentGate.node]);
+            }
+            else
+            {
+                std::cout << "error: attempt to follow gate during pulse propagation failed.\n";
+                return true; // halt
+            }
+        }
+        std::cout << currentGate.node << " -> " << nextGate.node << ' '; // todo remove?
+
+        // Check for a variety of rules
+        if(types[nextGate.node] == JOIN)
+        {
+            if(currentGate.type == X && nextGate.type == X)
+            {
+                // Pair of JOIN nodes with X gates connected
+                join(currentGate.node, nextGate.node);
+                std::cout << "join " << currentGate.node << " & " << nextGate.node << ' ';
+                return false;
+            }
+            else if(nextGate.type == X)
+            {
+                // Turn around
+                previousGateType = currentGate.type;
+                currentGate = Gate(nextGate.node, X);
+            }
+            else if(nextGate.type == A)
+                // Leave out the next B gate
+                currentGate = Gate(nextGate.node, B);
+            else if(nextGate.type == B)
+                // Leave out the next B gate
+                currentGate = Gate(nextGate.node, X);
+            else if(nextGate.type == A2X)
+            {
+                // Decide which direction to go
+                if(currentGate.type == AX)
+                {
+                    // Turn around
+                    previousGateType = currentGate.type;
+                    currentGate = Gate(currentGate.node, B);
+                }
+                else
+                {
+                    // Keep going
+                    currentGate = Gate(nextGate.node, X);
+                }
+            }
+            else if(nextGate.type == B2X)
+            {
+                // Keep going
+                currentGate = Gate(nextGate.node, X);
+            }
+            else
+            {
+                std::cout << "error: pulse didn't know what to do at JOIN node.\n";
+                return true; // halt
+            }
+        }
+        else if(types[nextGate.node] == SPLIT)
+        {
+            // Make sure we're not entering through the S gate
+            if(nextGate.type == S)
+            {
+                std::cout << "error: attempted to enter SPLIT node through S gate.\n";
+                return true; // halt
+            }
+            else
+            {
+                std::cout << "split at " << nextGate.node << ' ';
+
+                // Save current gate as cluster attachment point
+                Gate attachmentPoint = Gate(
+                    currentGate.node,
+                    table[currentGate.node][nextGate.node]);
+
+                // Disconnect the node we came from from the split node
+                if(attachmentPoint.type == JJ)
+                {
+                    // Expand the special gates OO and JJ, using A as the attachmentPoint
+                    // point if possible, and B as the current gate the split node is
+                    // attached to if possible.
+                    if(previousGateType == X)
+                    {
+                        table[attachmentPoint.node][nextGate.node] = B;
+                        table[nextGate.node][attachmentPoint.node] = B;
+                        attachmentPoint.type = A;
+                    }
+                    else if(previousGateType == A)
+                    {
+                        table[attachmentPoint.node][nextGate.node] = B;
+                        table[nextGate.node][attachmentPoint.node] = B;
+                        attachmentPoint.type = X;
+                    }
+                    else
+                    {
+                        table[attachmentPoint.node][nextGate.node] = X;
+                        table[nextGate.node][attachmentPoint.node] = B;
+                        attachmentPoint.type = A;
+                    }
+                }
+                else
+                {
+                    disconnectGate(nextGate);
+                }
+
+                // Find cluster to be copied
+                currentGate = Gate(nextGate.node, S);
+                while(true)
+                {
+                    // Get next node
+                    Gate next = followGate(currentGate);
+
+                    // Check if we found a non-split node yet
+                    if(types[next.node] != SPLIT)
+                        break;
+                    else
+                        currentGate = Gate(next.node, S);
+                }
+
+                // Copy cluster to attachment point
+                copy(currentGate, attachmentPoint);
+
+                // Dissolve split node
+                // get all gates pointing to the split node
+                auto connections = getGatesTo(nextGate.node);
+                // connect the gates together so the split node is removed
+                connect(connections[0], connections[1]);
+
+                // Finish
+                return false;
+            }
+        }
+        else if(types[nextGate.node] == HEAD)
+        {
+            // Returned to HEAD node, halt
+            std::cout << "halt ";
+            return true;
+        }
+        std::cout << '\n'; // todo remove?
+
+        // Save the gate type of the node we're entering to prevent backtracking
+        previousGateType = nextGate.type;
+    } // end for loop iterator
+
+    // The limit was reached without finding a halt condition, so halt
+    return true;
+}
+
+/* Creates "pulses" until a halt condition is met. It will also periodically
+   prune the graph.
+*/
+void LambdaNodes::run(int limit)
+{
+    // Loop until halt condition
+    while(!propagatePulse(100)){}
+
+    // End with a newline for asthetics
+    std::cout << '\n';
+}
+void LambdaNodes::run()
+{
+    run(100);
 }

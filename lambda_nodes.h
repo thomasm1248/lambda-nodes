@@ -40,6 +40,7 @@ public:
     // Some functions for building the graph
     Node createNode(NodeType type);
     void disconnectGate(Node node, GateType gateType);
+    void disconnectGate(Gate gate);
     void connect(Node node1, GateType type1, GateType type2, Node node2);
     void connect(Node node1, GateType type1, Gate gate2);
     void connect(Gate gate1, GateType type2, Node node2);
@@ -49,6 +50,10 @@ public:
     void join(Node node1, Node node2);
     Cluster selectCluster(Gate gate);
     void copy(Gate sourceGate, Gate destinationGate);
+    // This is the main part: The code that actually simulates everything
+    bool propagatePulse(int limit);
+    void run();
+    void run(int limit);
 };
 
 struct LambdaNodes::Gate {
