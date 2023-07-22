@@ -18,7 +18,7 @@ public:
     enum NodeType {NONE, HEAD, JOIN, SPLIT};
     typedef int Node;
     struct Gate;
-    typedef Node Cluster;
+    typedef std::vector<Node> Cluster;
     struct GatePair;
 
 private:
@@ -47,6 +47,17 @@ public:
     // Graph transformations
     GatePair prepareNeighborsForJoin(Node node, std::vector<Node> neighbors);
     void join(Node node1, Node node2);
+    Cluster selectCluster(Gate gate);
+    void copy(Gate sourceGate, Gate destinationGate);
+};
+
+struct LambdaNodes::Gate {
+    Node node;
+    GateType type;
+    Gate(Node node, GateType type)
+        : node(node)
+        , type(type)
+    {}
 };
 
 #endif

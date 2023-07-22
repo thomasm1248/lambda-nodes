@@ -1,19 +1,12 @@
 #include <cstddef>
 #include <iostream>
+#include <queue>
 
 #include "lambda_nodes.h"
 
 const int NOT_FOUND = -1;
 
-// Define the structs
-struct LambdaNodes::Gate {
-    Node node;
-    GateType type;
-    Gate(Node node, GateType type)
-        : node(node)
-        , type(type)
-    {}
-};
+// Define the structs that need to be defined
 struct LambdaNodes::GatePair {
     Gate a;
     Gate b;
@@ -306,17 +299,11 @@ void LambdaNodes::connect(Node node1, GateType type1, GateType type2, Node node2
     }
 }
 void LambdaNodes::connect(Node node1, GateType type1, Gate gate2)
-{
-    connect(node1, type1, gate2.type, gate2.node);
-}
+{ connect(node1, type1, gate2.type, gate2.node); }
 void LambdaNodes::connect(Gate gate1, GateType type2, Node node2)
-{
-    connect(gate1.node, gate1.type, type2, node2);
-}
+{ connect(gate1.node, gate1.type, type2, node2); }
 void LambdaNodes::connect(Gate gate1, Gate gate2)
-{
-    connect(gate1.node, gate1.type, gate2.type, gate2.node);
-}
+{ connect(gate1.node, gate1.type, gate2.type, gate2.node); }
 
 /* Expands special gates, and returns a pair of gates to be used in a join operation.
 */
@@ -419,4 +406,69 @@ void LambdaNodes::join(Node node1, Node node2)
     // Join ends
     connect(pair1.a, pair2.a);
     connect(pair1.b, pair2.b);
+}
+
+/* Searches through graph starting at a given gate, and collects all encountered
+   nodes into a list.
+*/
+LambdaNodes::Cluster LambdaNodes::selectCluster(Gate gate)
+{
+    // Define a cluster to contain all the nodes found
+    Cluster cluster;
+
+    // Define a queue to contain gates that need to be searched
+    std::queue<Gate> queue;
+    queue.push(gate);
+
+    // Search through graph until queue runs out
+    while(queue.size() > 0)
+    {
+        // Take the next gate on the queue
+        Gate currentGate = queue.front();
+        queue.pop();
+        // Get the node the gate points to
+        Node nextNode = followGate(currentGate).node;
+        // Check if node is already part of cluster
+        if(std::find(cluster.begin(), cluster.end(), nextNode) == cluster.end())
+        {
+            // Node not found, so we need to add it
+            // Add node to cluster
+            cluster.push_back(nextNode);
+            // Add its gates to the queue
+            auto connectedNodes = getConnectedNodes(nextNode);
+            for(int i = 0; i < connectedNodes.size(); i++)
+            {
+                // Skip current node
+                if(connectedNodes[i] == currentGate.node) continue;
+                // Add gate to the queue
+                queue.push(Gate(
+                    nextNode,
+                    table[nextNode][connectedNodes[i]]));
+            }
+        }
+    }
+
+    return cluster;
+}
+
+/* Copies a cluster of nodes attached to a gate to another gate.
+*/
+void LambdaNodes::copy(Gate sourceGate, Gate destinationGate)
+{
+    // Determine the source cluster
+    Cluster sourceNodes = selectCluster(sourceGate);
+
+    // Add new nodes
+    int prevSize = table.size();
+    for(int i = 0; i < sourceNodes.size(); i++)
+        createNode(types[sourceNodes[i]]);
+
+    // Copy over connection information
+    for(int i = 0; i < sourceNodes.size(); i++)
+        for(int j = 0; j < sourceNodes.size(); j++)
+            table[prevSize + i][prevSize + j] =
+                table[sourceNodes[i]][sourceNodes[j]];
+
+    // Attach new cluster to destination gate
+    connect(destinationGate, followGate(sourceGate).type, prevSize);
 }
