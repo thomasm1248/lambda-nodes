@@ -3,6 +3,8 @@
 
 #include "lambda_nodes.h"
 
+const int NOT_FOUND = -1;
+
 // Define the structs
 struct LambdaNodes::Gate {
     Node node;
@@ -11,6 +13,11 @@ struct LambdaNodes::Gate {
         : node(node)
         , type(type)
     {}
+};
+struct LambdaNodes::GatePair {
+    Gate a;
+    Gate b;
+    GatePair(Gate a, Gate b): a(a), b(b) {}
 };
 
 /* LambdaNodes graph constructor: It initializes a graph with a single head node.
@@ -35,14 +42,19 @@ void LambdaNodes::printTable()
 {
     for(int i = 0; i < table.size(); i++)
     {
-        std::cout << types[i] << " : ";
+        std::cout << i << " : ";
         for(GateType type : table[i])
-            std::cout << type << ' ';
+        {
+            if(type)
+                std::cout << type << ' ';
+            else
+                std::cout << "  ";
+        }
         std::cout << '\n';
     }
 }
 
-/* Follow a gate and return the next node, or return -1
+/* Follow a gate and return the next node, or return NOT_FOUND
 */
 LambdaNodes::Gate LambdaNodes::followGate(Node node, GateType type)
 {
@@ -59,11 +71,11 @@ LambdaNodes::Gate LambdaNodes::followGate(Node node, GateType type)
         }
     }
 
-    // Return the next node, or -1 if not found
+    // Return the next node, or NOT_FOUND if not found
     if(gateFound)
         return Gate(otherNode, table[otherNode][node]);
     else
-        return Gate(-1, N);
+        return Gate(NOT_FOUND, N);
 }
 LambdaNodes::Gate LambdaNodes::followGate(Gate gate)
 {
@@ -77,10 +89,21 @@ std::vector<LambdaNodes::Gate> LambdaNodes::getGatesTo(LambdaNodes::Node node)
     std::vector<Gate> gates;
     // Iterate through node's column
     for(int i = 0; i < table.size(); i++)
-        if(table[i][node] != N)
+        if(table[node][i] != N)
             // A connection to the node has been found
             gates.push_back(Gate(i, table[i][node]));
     return gates;
+}
+
+/* Return a list of all nodes a given node is connected to.
+*/
+std::vector<LambdaNodes::Node> LambdaNodes::getConnectedNodes(Node node)
+{
+    std::vector<Node> nodes;
+    for(int i = 0; i < table[node].size(); i++)
+        if(table[node][i] != N)
+            nodes.push_back(i);
+    return nodes;
 }
 
 /* Create a node with specified type, and return it.
@@ -113,7 +136,7 @@ void LambdaNodes::disconnectGate(Node node, GateType gateType)
     Node connectedNode = followGate(node, gateType).node;
 
     // Clear the connection if there is one
-    if(connectedNode != -1)
+    if(connectedNode != NOT_FOUND)
     {
         table[node][connectedNode] = N;
         table[connectedNode][node] = N;
@@ -293,4 +316,107 @@ void LambdaNodes::connect(Gate gate1, GateType type2, Node node2)
 void LambdaNodes::connect(Gate gate1, Gate gate2)
 {
     connect(gate1.node, gate1.type, gate2.type, gate2.node);
+}
+
+/* Expands special gates, and returns a pair of gates to be used in a join operation.
+*/
+LambdaNodes::GatePair LambdaNodes::prepareNeighborsForJoin(Node node, std::vector<Node> neighbors)
+{
+    if(neighbors.size() == 1)
+    {
+        // Get gate type of incoming connections
+        GateType incomingType = table[neighbors[0]][node];
+        GateType outgoingType = table[node][neighbors[0]];
+        // Remove neighbor's connection to the node
+        table[neighbors[0]][node] = N;
+        // Check for a variety of cases
+        if(outgoingType == R)
+            return GatePair(
+                Gate(neighbors[0], B),
+                Gate(neighbors[0], A));
+        else if(outgoingType == JJ)
+            return GatePair(
+                Gate(neighbors[0], A),
+                Gate(neighbors[0], B));
+        else if(outgoingType == A2X && incomingType == BX)
+            return GatePair(
+                Gate(neighbors[0], X),
+                Gate(neighbors[0], B));
+        else if(outgoingType == A2X && incomingType == AX)
+            return GatePair(
+                Gate(neighbors[0], X),
+                Gate(neighbors[0], A));
+        else if(outgoingType == B2X && incomingType == BX)
+            return GatePair(
+                Gate(neighbors[0], B),
+                Gate(neighbors[0], X));
+        else if(outgoingType == B2X && incomingType == AX)
+            return GatePair(
+                Gate(neighbors[0], A),
+                Gate(neighbors[0], X));
+        else
+        {
+            std::cout << "error: while expanding a special gate, an illegal gate was encountered.\n";
+            return GatePair(Gate(NOT_FOUND, N), Gate(NOT_FOUND, N));
+        }
+    }
+    else if(neighbors.size() == 2)
+    {
+        // Let's assume that the node wasn't doubly connected to any of its two
+        // neighbors because that should be impossible.
+        return GatePair(
+            Gate(neighbors[0], table[neighbors[0]][node]),
+            Gate(neighbors[1], table[neighbors[1]][node]));
+    }
+    else
+    {
+        std::cout << "error: while preparing nodes, node had an illegal number of connections.\n";
+        return GatePair(Gate(NOT_FOUND, N), Gate(NOT_FOUND, N));
+    }
+}
+
+/* Join two JOIN nodes together, while accounting for a number of odd special cases.
+   This function assumes that the first node was the first the iterator arrived at.
+*/
+void LambdaNodes::join(Node node1, Node node2)
+{
+    /* Check for some possible errors
+    if(node1 == node2)
+    {
+        std::cout << "error: attempted to join a node with itself.\n";
+        return;
+    }
+    if(table[node1][node2] != X || table[node2][node1] != X)
+    {
+        std::cout << "error: attempted to join nodes that weren't connected by their X gates.\n";
+        return;
+    }
+    // */
+
+    // Disconnect nodes
+    disconnectGate(node1, X);
+
+    // Get connections to neighboring nodes
+    auto connections1 = getConnectedNodes(node1);
+    auto connections2 = getConnectedNodes(node2);
+
+    // Check for identity function case
+    if(connections2[0] == I)
+    {
+        // Connect node1's neighbors together
+        // Prepare node1's neighbors
+        GatePair pair = prepareNeighborsForJoin(node1, connections1);
+        // Connect pair of gates to each other
+        connect(pair.a, pair.b);
+        // Finish
+        return;
+    }
+    
+    // Prepare ends
+    GatePair pair1 = prepareNeighborsForJoin(node1, connections1);
+    GatePair pair2 = prepareNeighborsForJoin(node2, connections2);
+
+    // Join ends
+    connect(pair1.a, pair2.a);
+    connect(pair1.b, pair2.b);
 }

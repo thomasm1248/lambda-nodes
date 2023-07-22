@@ -19,6 +19,7 @@ public:
     typedef int Node;
     struct Gate;
     typedef Node Cluster;
+    struct GatePair;
 
 private:
     // This 2D vector will contain the entire node graph
@@ -35,6 +36,7 @@ public:
     Gate followGate(Node node, GateType type);
     Gate followGate(Gate gate);
     std::vector<Gate> getGatesTo(Node node);
+    std::vector<Node> getConnectedNodes(Node node);
     // Some functions for building the graph
     Node createNode(NodeType type);
     void disconnectGate(Node node, GateType gateType);
@@ -42,6 +44,9 @@ public:
     void connect(Node node1, GateType type1, Gate gate2);
     void connect(Gate gate1, GateType type2, Node node2);
     void connect(Gate gate1, Gate gate2);
+    // Graph transformations
+    GatePair prepareNeighborsForJoin(Node node, std::vector<Node> neighbors);
+    void join(Node node1, Node node2);
 };
 
 #endif
