@@ -50,6 +50,11 @@ public:
     void join(Node node1, Node node2);
     Cluster selectCluster(Gate gate);
     void copy(Gate sourceGate, Gate destinationGate);
+    // Handy graph constructors
+    Gate apply(Gate func1, Gate func2);
+    Gate funcI();
+    Gate funcK();
+    Gate funcS();
     // This is the main part: The code that actually simulates everything
     bool propagatePulse(int limit);
     void run();

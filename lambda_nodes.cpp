@@ -355,9 +355,7 @@ LambdaNodes::GatePair LambdaNodes::prepareNeighborsForJoin(Node node, std::vecto
     {
         // Let's assume that the node wasn't doubly connected to any of its two
         // neighbors because that should be impossible.
-        return GatePair(
-            Gate(neighbors[0], table[neighbors[0]][node]),
-            Gate(neighbors[1], table[neighbors[1]][node]));
+        return GatePair(followGate(node, A), followGate(node, B));
     }
     else
     {
@@ -475,6 +473,62 @@ void LambdaNodes::copy(Gate sourceGate, Gate destinationGate)
 
     // Attach new cluster to destination gate
     connect(destinationGate, followGate(sourceGate).type, prevSize);
+}
+
+/* Applies one function to another.
+*/
+LambdaNodes::Gate LambdaNodes::apply(Gate func1, Gate func2)
+{
+    Node join = createNode(JOIN);
+    connect(join, X, func1);
+    connect(join, B, func2);
+    return Gate(join, A);
+}
+
+/* Builds an I combinator
+*/
+LambdaNodes::Gate LambdaNodes::funcI()
+{
+    Node front = createNode(JOIN);
+    connect(front, A, B, front);
+    return Gate(front, X);
+}
+
+/* Builds a K combinator
+*/
+LambdaNodes::Gate LambdaNodes::funcK()
+{
+    Node first = createNode(JOIN);
+    Node second = createNode(JOIN);
+    Node dummy = createNode(JOIN);
+    connect(first, A, X, second);
+    connect(first, B, A, second);
+    connect(second, B, X, dummy);
+    return Gate(first, X);
+}
+
+/* Builds an S combinator
+*/
+LambdaNodes::Gate LambdaNodes::funcS()
+{
+    Node first = createNode(JOIN);
+    Node second = createNode(JOIN);
+    Node third = createNode(JOIN);
+    Node splitThird = createNode(SPLIT);
+    Node apply1to3 = createNode(JOIN);
+    Node apply2to3 = createNode(JOIN);
+    Node applyFinal = createNode(JOIN);
+    connect(first, A, X, second);
+    connect(second, A, X, third);
+    connect(splitThird, S, B, third);
+    connect(apply1to3, X, B, first);
+    connect(apply1to3, B, A, splitThird);
+    connect(apply2to3, X, B, second);
+    connect(apply2to3, B, B, splitThird);
+    connect(applyFinal, X, A, apply1to3);
+    connect(applyFinal, B, A, apply2to3);
+    connect(applyFinal, A, A, third);
+    return Gate(first, X);
 }
 
 /* Moves a "pulse" through the graph, starting at the head node. Its movement will
